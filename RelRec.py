@@ -1,12 +1,6 @@
-'''
-Tensorflow implementation of RCF
-
-@references:
-'''
 import math
 import numpy as np
 import tensorflow.compat.v1 as tf
-from sklearn.base import BaseEstimator, TransformerMixin
 from time import time
 import argparse
 import LoadData_ML as DATA
@@ -52,7 +46,7 @@ def parse_args():
     return parser.parse_args()
 
 
-class MF(BaseEstimator, TransformerMixin):
+class MF():
     def __init__(self, num_users, num_items, pretrain_flag, hidden_factor, epoch, batch_size, learning_rate,
                  lamda_bilinear, optimizer_type, verbose, layers, activation_function, keep_prob, save_file,
                  random_seed=2016):
@@ -959,67 +953,82 @@ class MF(BaseEstimator, TransformerMixin):
                 return inputs - (1 - mask) * 1e12
 
     def evaluate(self):
-        # f = open(fname, 'a')
         self.graph.finalize()
-        count = [0, 0, 0, 0, 0]
-        rank = [[], [], [], [], []]
-        hit_user_list = []
-        hit_item_list = []
+        mrr_users = [[], [], []]
+        mrr_rank = [[], [], []]
+        count = [0, 0, 0]
+
+        user_scores = {}
+        user_list = list(set(data.Test_data['User']))
+        flag = 1
+        for index in user_list:
+            flag = flag + 1
+            scores = model.get_scores_per_user(index)
+            user_scores[index] = scores
+
+        true_item_scores = []
         for index in range(len(data.Test_data['User'])):
-            user_id = data.Test_data['User'][index]
-            scores = model.get_scores_per_user(user_id)
-            # get true item score
+            user = data.Test_data['User'][index]
+            scores = user_scores[user]
             true_item_id = data.Test_data['Item'][index]
             true_item_score = scores[true_item_id]
             # delete visited scores
-            visited = data.user_positive_list[user_id]  # get positive list for the userID
+            visited = data.user_positive_list[user]  # get positive list for the userID
+
             scores = np.delete(scores, visited)
-            # whether hit
             sorted_scores = sorted(scores, reverse=True)
+
+            true_item_scores.append(true_item_score)
+
             label = [sorted_scores[4]]
+            label.append([sorted_scores[7]])
             label.append([sorted_scores[9]])
-            label.append([sorted_scores[14]])
-            label.append([sorted_scores[19]])
-            label.append([sorted_scores[24]])
+
 
             if true_item_score >= label[0]:
+                if user not in mrr_users[0]:
+                    mrr_users[0].append(user)
+                    mrr_rank[0].append(sorted_scores.index(true_item_score) + 1)
+                else:
+                    if mrr_rank[0][mrr_users[0].index(user)] > (sorted_scores.index(true_item_score) + 1):
+                        mrr_rank[0][mrr_users[0].index(user)] = sorted_scores.index(true_item_score) + 1
                 count[0] = count[0] + 1
-                rank[0].append(sorted_scores.index(true_item_score) + 1)
-                hit_user_list.append(user_id)
-                hit_item_list.append(true_item_id)
+
             if true_item_score >= label[1]:
+                if user not in mrr_users[1]:
+                    mrr_users[1].append(user)
+                    mrr_rank[1].append(sorted_scores.index(true_item_score) + 1)
+                else:
+                    if mrr_rank[1][mrr_users[1].index(user)] > (sorted_scores.index(true_item_score) + 1):
+                        mrr_rank[1][mrr_users[1].index(user)] = sorted_scores.index(true_item_score) + 1
                 count[1] = count[1] + 1
-                rank[1].append(sorted_scores.index(true_item_score) + 1)
+
             if true_item_score >= label[2]:
+                if user not in mrr_users[2]:
+                    mrr_users[2].append(user)
+                    mrr_rank[2].append(sorted_scores.index(true_item_score) + 1)
+                else:
+                    if mrr_rank[2][mrr_users[2].index(user)] > (sorted_scores.index(true_item_score) + 1):
+                        mrr_rank[2][mrr_users[2].index(user)] = sorted_scores.index(true_item_score) + 1
                 count[2] = count[2] + 1
-                rank[2].append(sorted_scores.index(true_item_score) + 1)
-            if true_item_score >= label[3]:
-                count[3] = count[3] + 1
-                rank[3].append(sorted_scores.index(true_item_score) + 1)
-            if true_item_score >= label[4]:
-                count[4] = count[4] + 1
-                rank[4].append(sorted_scores.index(true_item_score) + 1)
-            print(index)
-        for i in range(5):
+
+        ks = [5, 8, 10]
+        for i in range(3):
             mrr = 0
-            ndcg = 0
-            hit_rate = float(count[i]) / len(data.Test_data['User'])
-            for item in rank[i]:
+            recall = count[i] / len(data.Test_data['User'])
+            for item in mrr_rank[i]:
                 mrr = mrr + float(1.0) / item
-                ndcg = ndcg + float(1.0) / np.log2(item + 1)
-            mrr = mrr / len(data.Test_data['User'])
-            ndcg = ndcg / len(data.Test_data['User'])
-            k = (i + 1) * 5
+            mrr = mrr / len(user_list)
+            k = ks[i]
+
             print("top:%d" % k)
-            print("the Hit Rate is: %f" % hit_rate)
+            print("the recall is: %f" % recall)
             print("the MRR is: %f" % mrr)
-            print("the NDCG is: %f" % ndcg)
 
             f = open(fname, 'a')
             f.write("top:%d" % k + '\n')
-            f.write("the Hit Rate is: %f" % hit_rate + '\n')
+            f.write("the recall is: %f" % recall + '\n')
             f.write("the MRR is: %f" % mrr + '\n')
-            f.write("the NDCG is: %f" % ndcg + '\n')
             f.close()
 
     def get_scores_per_user(self, user_id):  # evaluate the results for an user context, return scorelist
