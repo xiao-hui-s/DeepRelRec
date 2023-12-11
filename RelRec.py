@@ -49,7 +49,7 @@ def parse_args():
 class MF():
     def __init__(self, num_users, num_items, pretrain_flag, hidden_factor, epoch, batch_size, learning_rate,
                  lamda_bilinear, optimizer_type, verbose, layers, activation_function, keep_prob, save_file,
-                 random_seed=2016):
+                 random_seed=2023):
         # bind params to class
         self.batch_size = batch_size
         self.learning_rate = learning_rate
